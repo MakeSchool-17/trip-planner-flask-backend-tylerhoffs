@@ -3,6 +3,7 @@ from flask_restful import Resource, Api
 from pymongo import MongoClient
 from bson.objectid import ObjectId
 from utils.mongo_json_encoder import JSONEncoder
+import bcrypt
 from functools import wraps
 
 # Basic Setup
@@ -34,7 +35,7 @@ def requires_auth(f):
 class MyObject(Resource):
 
     def post(self):
-        new_myobject = request.json
+        # new_myobject = request.json
         myobject_collection = app.db.myobjects
         result = myobject_collection.insert_one(request.json)
 
@@ -61,8 +62,11 @@ class User(Resource):
     def post(self):
         new_user = request.json
         user_collection = app.db.users
-        result = user_collection.insert_one(request.json)
-
+        user_pass = new_user["password"]
+        user_pass = user_pass.encode('utf-8')
+        hashed = bcrypt.hashpw(user_pass, bcrypt.gensalt(12))
+        new_user["password"] = hashed.decode('utf-8')
+        result = user_collection.insert_one(new_user)
         user = user_collection.find_one({"_id": ObjectId(result.inserted_id)})
 
         return user
@@ -82,9 +86,9 @@ api.add_resource(User, '/users/', '/users/<string:user_id>')
 
 
 class Trip(Resource):
-    @requires_auth
+    # @requires_auth
     def post(self):
-        new_trip = request.json
+        # new_trip = request.json
         trip_collection = app.db.trips
         result = trip_collection.insert_one(request.json)
 
@@ -92,7 +96,7 @@ class Trip(Resource):
 
         return trip
 
-    @requires_auth
+    # @requires_auth
     def get(self, trip_id):
         trip_collection = app.db.trips
         trip = trip_collection.find_one({"_id": ObjectId(trip_id)})
@@ -105,22 +109,32 @@ class Trip(Resource):
             return trip
 
     def delete(self, trip_id):
+        # new_trip = request.json
+        trip_collection = app.db.trips
+
+        result = trip_collection.delete_many({"_id": ObjectId(trip_id)})
+
+        if result == 0:
+            response = jsonify(data=[])
+            response.status_code = 404
+            return response
+        else:
+            response = jsonify(data=[])
+            response.status_code = 200
+            return response
+
+    def put(self, trip_id):
         new_trip = request.json
         trip_collection = app.db.trips
-        result = trip_collection.insert_one(request.json)
-
-        trip = trip_collection.find_one({"_id": ObjectId(result.inserted_id)})
-
-        return trip
-
-    def delete(self, trip_id):
-        new_trip = request.json
-        trip_collection = app.db.trips
-        result = trip_collection.insert_one(request.json)
-
-        trip = trip_collection.find_one({"_id": ObjectId(result.inserted_id)})
-
-        return trip
+        result = trip_collection.replace_one({"_id": ObjectId(trip_id)}, new_trip)
+        if result.modified_count == 0:
+            response = jsonify(data=[])
+            response.status_code = 404
+            return response
+        else:
+            response = jsonify(data=[])
+            response.status_code = 200
+            return response
 
 api.add_resource(Trip, '/trips/', '/trips/<string:trip_id>')
 
